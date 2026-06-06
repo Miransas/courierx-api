@@ -1,102 +1,104 @@
-# CourierX
+# CourierX API
 
-Self-hosted transactional email API. A Resend alternative you can run on your own infrastructure.
+The HTTP API for [CourierX](https://courierx.io) — an open-source, self-hosted email service.
 
-> **Status:** Alpha. Under active development. Not production-ready yet.
+Written in Rust with Axum and SQLx. Accepts `POST /v1/emails` and writes to a Postgres-backed queue, where [courierx-worker](https://github.com/Miransas/courierx-worker) picks them up for delivery.
 
-## Why
+## Stack
 
-Transactional email providers charge $20+/month for volumes that cost cents at the SMTP layer. CourierX wraps AWS SES (and eventually self-hosted Postfix) behind a clean HTTP API and dashboard, so you pay infrastructure costs, not subscription fees.
+- **Language:** Rust (edition 2021)
+- **Framework:** Axum 0.7
+- **Database:** Postgres 16+ via SQLx 0.8
+- **Auth:** Argon2id password hashing + JWT
+- **Migrations:** `sqlx::migrate!` (compile-time, embedded)
 
-## Features
+## Endpoints
 
-**Working now**
-- `POST /v1/emails` — queue an email for delivery
-- API key authentication (Argon2-hashed)
-- Postgres-backed queue (no Redis dependency)
+| Method | Path           | Description                              | Auth         |
+|--------|----------------|------------------------------------------|--------------|
+| GET    | `/health`      | Liveness probe                           | None         |
+| POST   | `/v1/emails`   | Queue a transactional email              | API key      |
 
-**Planned**
-- AWS SES delivery worker
-- Web dashboard (send logs, API key management, metrics)
-- Webhooks (delivered, bounced, complained)
-- Domain verification (SPF, DKIM, DMARC helper)
-- JavaScript and Go SDKs
-- Self-hosted Postfix backend (Phase 2)
+The `POST /v1/emails` body is **Resend-compatible** — same request and response shape, so existing Resend SDKs work by changing only the base URL.
 
-## Architecture
-
-CourierX is split across multiple repositories:
-
-| Repo | Language | Purpose |
-|------|----------|---------|
-| `courierx-api` | Rust | HTTP API server (this repo) |
-| `courierx-worker` | Rust | Queue consumer, SES delivery |
-| `courierx-web` | Next.js | Dashboard at console.courierx.io |
-| `courierx-sdk-js` | TypeScript | `@courierx/node` |
-| `courierx-cli` | Go | Command-line client |
-| `courierx-docs` | Nextra | docs.courierx.io |
-
-## Quick start
-
-Requirements: Rust stable, PostgreSQL 14+.
+### Example
 
 ```bash
-git clone https://github.com/miransas/courierx-api
+curl -X POST http://localhost:8080/v1/emails \
+  -H "Authorization: Bearer cx_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "you@yourdomain.com",
+    "to": "user@example.com",
+    "subject": "Welcome",
+    "html": "<p>Hello.</p>"
+  }'
+```
+
+Response (202 Accepted):
+
+```json
+{ "id": "4f8a2c91-7b3d-4e6a-9c5f-1a8b2d4e6f01", "status": "queued" }
+```
+
+## Local development
+
+### Prerequisites
+
+- Rust 1.85+ (`rustup default stable`)
+- Postgres 16+ running locally
+- `sqlx-cli` installed: `cargo install sqlx-cli --no-default-features --features postgres`
+
+### Setup
+
+```bash
+git clone https://github.com/Miransas/courierx-api.git
 cd courierx-api
+
+# Create the database
+createdb courierx
+
+# Copy the example env, then edit as needed
 cp .env.example .env
-# edit .env with your DATABASE_URL
+
+# Run migrations
+sqlx migrate run
+
+# Start the API
 cargo run
 ```
 
-The server listens on `:8080`. Verify it's up:
+The server listens on `http://localhost:8080` by default. Configure via `.env`:
 
-```bash
-curl localhost:8080/health
-# {"status":"ok"}
+```env
+DATABASE_URL=postgres://courierx:courierx@localhost:5432/courierx
+PORT=8080
+JWT_SECRET=change-me-in-production
+RUST_LOG=courierx_api=debug,tower_http=debug
 ```
 
-### Sending an email
-
-Once you've inserted an API key into the `api_keys` table:
+### Generating a development API key
 
 ```bash
-curl -X POST localhost:8080/v1/emails \
-  -H "Authorization: Bearer cx_live_<your_key>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "from": "hello@yourdomain.com",
-    "to": "user@example.com",
-    "subject": "Hello from CourierX",
-    "html": "<p>It works.</p>"
-  }'
-# {"id":"<uuid>","status":"queued"}
+cargo run --example gen_api_key
 ```
 
-The email sits in the `emails` table until the worker picks it up.
+This prints a usable `cx_live_...` key and its Argon2 hash. Insert the row into `api_keys` to start sending requests.
 
-## Configuration
+## Schema
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | — | Postgres connection string (required) |
-| `PORT` | `8080` | HTTP listen port |
-| `RUST_LOG` | `info` | Tracing filter |
+Three tables: `workspaces`, `api_keys`, `emails`. Migrations live in `migrations/`. The API is the source of truth for the schema — the worker reads the same Postgres database but does not run migrations.
 
-## Development
+## Other repos in the CourierX project
 
-```bash
-cargo check          # fast type-check
-cargo clippy         # lints
-cargo fmt            # format
-cargo test           # run tests
-```
+- [courierx-web](https://github.com/sardorazimov/courierx-web) — the marketing site at courierx.io
+- [courierx-worker](https://github.com/Miransas/courierx-worker) — the queue consumer that delivers emails
+- `courierx-console` — the dashboard (private until launch)
 
-Migrations run automatically on startup.
+## Brand
+
+CourierX is built under the [Miransas](https://miransas.com) brand by [@sardorazimov](https://github.com/sardorazimov).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
-
----
-
-Part of [Miransas](https://miransas.com).
+MIT — see [LICENSE](./LICENSE)
