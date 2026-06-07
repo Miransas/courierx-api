@@ -1,9 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
     pub port: u16,
+    pub jwt_secret: String,
+    pub jwt_expiry_days: i64,
 }
 
 impl Config {
@@ -13,6 +15,22 @@ impl Config {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(8080);
-        Ok(Self { database_url, port })
+
+        let jwt_secret = std::env::var("JWT_SECRET").context("JWT_SECRET not set")?;
+        if jwt_secret.len() < 32 {
+            bail!("JWT_SECRET must be at least 32 characters");
+        }
+
+        let jwt_expiry_days = std::env::var("JWT_EXPIRY_DAYS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(7);
+
+        Ok(Self {
+            database_url,
+            port,
+            jwt_secret,
+            jwt_expiry_days,
+        })
     }
 }

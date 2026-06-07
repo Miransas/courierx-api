@@ -9,6 +9,12 @@ pub enum AppError {
     #[error("validation: {0}")]
     Validation(String),
 
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("conflict: {0}")]
+    Conflict(String),
+
     #[error("missing api key")]
     MissingApiKey,
 
@@ -26,6 +32,8 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code, message): (StatusCode, &'static str, String) = match &self {
             AppError::Validation(msg) => (StatusCode::BAD_REQUEST, "validation_error", msg.clone()),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone()),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
             AppError::MissingApiKey => (
                 StatusCode::UNAUTHORIZED,
                 "missing_api_key",

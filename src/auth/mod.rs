@@ -1,3 +1,7 @@
+pub mod jwt;
+pub mod middleware;
+pub mod password;
+
 use crate::error::AppError;
 use argon2::password_hash::PasswordHash;
 use argon2::{Argon2, PasswordVerifier};
@@ -8,7 +12,7 @@ use axum::response::Response;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Auth context attached to authenticated requests via `Extension`.
+/// Auth context attached to API-key-authenticated requests via `Extension`.
 #[derive(Debug, Clone)]
 pub struct AuthContext {
     pub workspace_id: Uuid,
@@ -17,7 +21,7 @@ pub struct AuthContext {
 
 const KEY_PREFIX_LEN: usize = 12;
 
-/// Middleware that validates a `Authorization: Bearer <key>` header against
+/// Middleware that validates an `Authorization: Bearer <key>` header against
 /// the `api_keys` table. On success, inserts `AuthContext` into request
 /// extensions and fire-and-forget updates `last_used_at`.
 pub async fn require_api_key(
