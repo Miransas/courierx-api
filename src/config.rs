@@ -6,6 +6,7 @@ pub struct Config {
     pub port: u16,
     pub jwt_secret: String,
     pub jwt_expiry_days: i64,
+    pub allowed_origins: Vec<String>,
 }
 
 impl Config {
@@ -26,11 +27,19 @@ impl Config {
             .and_then(|s| s.parse().ok())
             .unwrap_or(7);
 
+        let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
         Ok(Self {
             database_url,
             port,
             jwt_secret,
             jwt_expiry_days,
+            allowed_origins,
         })
     }
 }

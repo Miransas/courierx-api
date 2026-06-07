@@ -6,10 +6,12 @@ mod routes;
 
 use axum::Router;
 use axum::extract::FromRef;
+use axum::http::{HeaderName, HeaderValue, Method};
 use axum::middleware;
 use axum::routing::{get, post};
 use config::Config;
 use sqlx::PgPool;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -60,10 +62,34 @@ async fn main() -> anyhow::Result<()> {
             auth::require_api_key,
         ));
 
+    // TODO: flip allow_credentials to true when JWT moves to HTTP-only cookies.
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(
+            cfg.allowed_origins
+                .iter()
+                .filter_map(|o| HeaderValue::from_str(o).ok())
+                .collect::<Vec<_>>(),
+        ))
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            HeaderName::from_static("authorization"),
+            HeaderName::from_static("content-type"),
+            HeaderName::from_static("accept"),
+        ])
+        .allow_credentials(false);
+
     let app = Router::new()
         .route("/health", get(routes::health::health))
         .nest("/auth", routes::auth::router())
         .nest("/v1", v1)
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
