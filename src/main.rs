@@ -88,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(routes::health::health))
         .nest("/auth", routes::auth::router())
+        .nest("/v1/api-keys", routes::api_keys::router())
         .nest("/v1", v1)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
